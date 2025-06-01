@@ -4,12 +4,16 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization) // YENİ EKLENEN ALIAS
 }
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
+// API anahtarını local.properties'den al
+val mapsApiKeyFromLocalProps = localProperties.getProperty("MAPS_API_KEY", "DEFAULT_KEY_IF_NOT_FOUND_IN_LOCAL_PROPS")
+
 android {
     namespace = "com.accessiblemap"
     compileSdk = 35
@@ -22,7 +26,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders["mapsApiKey"] = localProperties.getProperty("MAPS_API_KEY", "DEFAULT_API_KEY_IF_NOT_FOUND")
+//        manifestPlaceholders["mapsApiKey"] = localProperties.getProperty("MAPS_API_KEY", "DEFAULT_API_KEY_IF_NOT_FOUND")
+        manifestPlaceholders["mapsApiKey"] = mapsApiKeyFromLocalProps // Manifest için
+
+        // API anahtarını buildConfig'e eklemek yerine (veya ek olarak) resValue olarak ekle:
+        // Bu, R.string.Maps_api_key şeklinde erişilebilen bir string kaynağı oluşturacak.
+        resValue("string", "Maps_api_key", mapsApiKeyFromLocalProps)
 
     }
 
@@ -43,6 +52,7 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
+       // buildConfig = true
         compose = true
     }
 }
@@ -64,8 +74,19 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-
+    implementation (libs.material)
     implementation(libs.play.services.location)
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
+    implementation(libs.places)
+    implementation(libs.kotlinx.coroutines.play.services) // En güncel sürümü kontrol edin
+
+    // Ktor Client
+    implementation(libs.ktor.client.core) // Örn: "io.ktor:ktor-client-core:2.3.10"
+    implementation(libs.ktor.client.android) // Android engine
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    // Kotlinx Serialization JSON
+    implementation(libs.kotlinx.serialization.json)
 }
