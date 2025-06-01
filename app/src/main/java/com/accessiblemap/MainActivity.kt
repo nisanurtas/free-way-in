@@ -16,10 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -31,21 +28,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf // Değişti: mutableStateOf'tan
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope // CoroutineScope için
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
-import com.accessiblemap.ui.theme.AccessibleMapTheme // temanız
+import com.accessiblemap.ui.theme.AccessibleMapTheme
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -327,10 +322,29 @@ fun LocationPermissionAndMapScreen() {
 
             apiAccessiblePlaces.forEach { placeInfo ->
                 if (placeInfo.latitude != null && placeInfo.longitude != null) {
+                    var accessibilityOptionsCount = 0
+                    if(placeInfo.accessibilityOptions!=null){
+                        if(placeInfo.accessibilityOptions.wheelchairAccessibleEntrance == true)
+                            accessibilityOptionsCount++
+                        if(placeInfo.accessibilityOptions.wheelchairAccessibleRestroom == true)
+                            accessibilityOptionsCount++
+                        if(placeInfo.accessibilityOptions.wheelchairAccessibleParking == true)
+                            accessibilityOptionsCount++
+                        if(placeInfo.accessibilityOptions.wheelchairAccessibleSeating == true)
+                            accessibilityOptionsCount++
+                    }
+                    val markerHue = when (accessibilityOptionsCount) {
+                        1 -> BitmapDescriptorFactory.HUE_RED
+                        2 -> BitmapDescriptorFactory.HUE_ORANGE
+                        3 -> BitmapDescriptorFactory.HUE_YELLOW
+                        4 -> BitmapDescriptorFactory.HUE_GREEN
+                        else -> BitmapDescriptorFactory.HUE_ROSE
+                    }
                     MarkerInfoWindow(
                         state = MarkerState(position = LatLng(placeInfo.latitude, placeInfo.longitude)),
                         title = placeInfo.name ?: "Bilinmeyen Mekan",
-                        snippet = "Erişilebilirlik detayları için dokunun"
+                        snippet = "Erişilebilirlik detayları için dokunun",
+                        icon = BitmapDescriptorFactory.defaultMarker(markerHue)
                     ) { marker ->
                         Column(
                             modifier = Modifier

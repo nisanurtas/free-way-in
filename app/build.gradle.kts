@@ -1,3 +1,4 @@
+import org.gradle.kotlin.dsl.implementation
 import java.util.Properties
 
 plugins {
@@ -32,7 +33,6 @@ android {
         // API anahtarını buildConfig'e eklemek yerine (veya ek olarak) resValue olarak ekle:
         // Bu, R.string.Maps_api_key şeklinde erişilebilen bir string kaynağı oluşturacak.
         resValue("string", "Maps_api_key", mapsApiKeyFromLocalProps)
-
     }
 
     buildTypes {
@@ -52,7 +52,7 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
-       // buildConfig = true
+        buildConfig = true
         compose = true
     }
 }
