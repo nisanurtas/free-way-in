@@ -17,13 +17,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +75,10 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import kotlinx.serialization.builtins.ListSerializer
 
 @Serializable
 data class ApiAccessibilityOptions(
@@ -154,7 +166,47 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
+@Serializable
+data class UserAccessibilityFeedback(
+    val lat: Double,
+    val lng: Double,
+    val placeName: String?,
+    val wheelchairEntrance: Boolean = false,
+    val wheelchairParking: Boolean = false,
+    val wheelchairRestroom: Boolean = false,
+    val wheelchairSeating: Boolean = false,
+    val rampAvailable: Boolean = false,
+    val elevatorAvailable: Boolean = false,
+    val brailleSupport: Boolean = false,
+    val signLanguageSupport: Boolean = false,
+    val suitableForVisuallyImpaired: Boolean = false,
+    val suitableForPhysicallyDisabled: Boolean = false,
+    val suitableForHearingImpaired: Boolean = false,
+    val visionMenu: Boolean = false,
+    val visionStaff: Boolean = false,
+    val generalAccessible: Boolean = false,
+    val notes: String? = null
+)
+
+fun saveUserFeedbacks(context: Context, feedbacks: List<UserAccessibilityFeedback>) {
+    val prefs = context.getSharedPreferences("user_feedbacks", Context.MODE_PRIVATE)
+    val json = kotlinx.serialization.json.Json.encodeToString(ListSerializer(UserAccessibilityFeedback.serializer()), feedbacks)
+    prefs.edit().putString("feedbacks", json).apply()
+}
+
+fun loadUserFeedbacks(context: Context): List<UserAccessibilityFeedback> {
+    val prefs = context.getSharedPreferences("user_feedbacks", Context.MODE_PRIVATE)
+    val json = prefs.getString("feedbacks", null) ?: return emptyList()
+    return try {
+        kotlinx.serialization.json.Json.decodeFromString(ListSerializer(UserAccessibilityFeedback.serializer()), json)
+    } catch (e: Exception) {
+        emptyList()
+    }
+}
+
 @SuppressLint("MissingPermission")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationPermissionAndMapScreen() {
     val context = LocalContext.current
@@ -252,7 +304,7 @@ fun LocationPermissionAndMapScreen() {
             isLoadingApiPlaces = true
             Log.i("ApiService", "Kullanıcı konumu: ${userLocation!!.latitude}, ${userLocation!!.longitude}. Flask API çağrılıyor...")
 
-            scope.launch { // Coroutine içinde API çağrısı
+            scope.launch {
                 val fetchedPlaces = fetchAccessiblePlacesFromApi(
                     userLocation!!.latitude,
                     userLocation!!.longitude,
@@ -300,6 +352,32 @@ fun LocationPermissionAndMapScreen() {
         }
     }
 
+    // Bottom sheet için state'ler
+    val bottomSheetState = rememberModalBottomSheetState()
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var selectedLatLng by remember { mutableStateOf<LatLng?>(null) }
+    var selectedPlaceName by remember { mutableStateOf<String?>(null) }
+    // Kullanıcıdan alınan feedback'ler localde tutuluyor
+    val userFeedbacks = remember { mutableStateListOf<UserAccessibilityFeedback>().apply { addAll(loadUserFeedbacks(context)) } }
+    // Chip seçim state'leri
+    var wheelchairEntrance by remember { mutableStateOf(false) }
+    var wheelchairParking by remember { mutableStateOf(false) }
+    var wheelchairRestroom by remember { mutableStateOf(false) }
+    var wheelchairSeating by remember { mutableStateOf(false) }
+    var visionMenu by remember { mutableStateOf(false) }
+    var visionStaff by remember { mutableStateOf(false) }
+    var generalAccessible by remember { mutableStateOf(false) }
+    var notes by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
+
+    var rampAvailable by remember { mutableStateOf(false) }
+    var elevatorAvailable by remember { mutableStateOf(false) }
+    var brailleSupport by remember { mutableStateOf(false) }
+    var signLanguageSupport by remember { mutableStateOf(false) }
+    var suitableForVisuallyImpaired by remember { mutableStateOf(false) }
+    var suitableForPhysicallyDisabled by remember { mutableStateOf(false) }
+    var suitableForHearingImpaired by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
@@ -310,7 +388,21 @@ fun LocationPermissionAndMapScreen() {
             ),
             properties = MapProperties(
                 isMyLocationEnabled = hasLocationPermission
-            )
+            ),
+            onMapLongClick = { latLng ->
+                selectedLatLng = latLng
+                selectedPlaceName = null // İleride reverse geocode ile isim alınabilir
+                // Chip'leri sıfırla
+                wheelchairEntrance = false
+                wheelchairParking = false
+                wheelchairRestroom = false
+                wheelchairSeating = false
+                visionMenu = false
+                visionStaff = false
+                generalAccessible = false
+                notes = ""
+                showBottomSheet = true
+            }
         ) {
             userLocation?.let { loc ->
                 Marker(
@@ -378,6 +470,47 @@ fun LocationPermissionAndMapScreen() {
                     }
                 }
             }
+
+            // Kendi kaydedilen yerleri göster (beyaz pin)
+            userFeedbacks.forEach { feedback ->
+                MarkerInfoWindow(
+                    state = MarkerState(position = LatLng(feedback.lat, feedback.lng)),
+                    title = feedback.placeName ?: "Kayıtlı Yer",
+                    snippet = "Detaylar için dokunun",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE)
+                ) { marker ->
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = MaterialTheme.shapes.medium
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            feedback.placeName ?: "Kayıtlı Yer",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            getUserFeedbackSummary(feedback),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        feedback.notes?.let {
+                            if (it.isNotBlank()) Text(
+                                "Not: $it",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (isLoadingApiPlaces) {
@@ -403,6 +536,92 @@ fun LocationPermissionAndMapScreen() {
                 Text("Konum izni reddedildi. Uygulamanın çalışması için izin vermelisiniz.")
             }
         }
+
+        if (showBottomSheet && selectedLatLng != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showBottomSheet = false },
+                sheetState = bottomSheetState,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = selectedPlaceName?.takeIf { it.isNotBlank() } ?: "Seçilen Konum: ${selectedLatLng!!.latitude.format(5)}, ${selectedLatLng!!.longitude.format(5)}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Text("Erişilebilirlik Özellikleri:", fontWeight = FontWeight.SemiBold)
+                    val chipOptions = listOf(
+                        Triple("Giriş Uygun", wheelchairEntrance, { wheelchairEntrance = !wheelchairEntrance }),
+                        Triple("Otopark Uygun", wheelchairParking, { wheelchairParking = !wheelchairParking }),
+                        Triple("Tuvalet Uygun", wheelchairRestroom, { wheelchairRestroom = !wheelchairRestroom }),
+                        Triple("Oturma Alanı Uygun", wheelchairSeating, { wheelchairSeating = !wheelchairSeating }),
+                        Triple("Rampa Var", rampAvailable, { rampAvailable = !rampAvailable }),
+                        Triple("Asansör Var", elevatorAvailable, { elevatorAvailable = !elevatorAvailable }),
+                        Triple("Braille Desteği", brailleSupport, { brailleSupport = !brailleSupport }),
+                        Triple("İşaret Dili Desteği", signLanguageSupport, { signLanguageSupport = !signLanguageSupport }),
+                        Triple("Görme Engelliler İçin Uygun", suitableForVisuallyImpaired, { suitableForVisuallyImpaired = !suitableForVisuallyImpaired }),
+                        Triple("Fiziksel Engelliler İçin Uygun", suitableForPhysicallyDisabled, { suitableForPhysicallyDisabled = !suitableForPhysicallyDisabled }),
+                        Triple("İşitme Engelliler İçin Uygun", suitableForHearingImpaired, { suitableForHearingImpaired = !suitableForHearingImpaired }),
+                        Triple("Görme Engelli Menüsü", visionMenu, { visionMenu = !visionMenu }),
+                        Triple("Görme Engelliye Yardımcı Personel", visionStaff, { visionStaff = !visionStaff }),
+                        Triple("Genel Olarak Uygun", generalAccessible, { generalAccessible = !generalAccessible })
+                    )
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(),
+                        userScrollEnabled = false
+                    ) {
+                        items(chipOptions) { (label, selected, onClick) ->
+                            FilterChip(
+                                selected = selected,
+                                onClick = onClick,
+                                label = { Text(label) },
+                                modifier = Modifier.padding(4.dp)
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Ek Notlar") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
+                    Button(
+                        onClick = {
+                            // Feedback'i kaydet
+                            userFeedbacks.add(
+                                UserAccessibilityFeedback(
+                                    lat = selectedLatLng!!.latitude,
+                                    lng = selectedLatLng!!.longitude,
+                                    placeName = selectedPlaceName,
+                                    wheelchairEntrance = wheelchairEntrance,
+                                    wheelchairParking = wheelchairParking,
+                                    wheelchairRestroom = wheelchairRestroom,
+                                    wheelchairSeating = wheelchairSeating,
+                                    rampAvailable = rampAvailable,
+                                    elevatorAvailable = elevatorAvailable,
+                                    brailleSupport = brailleSupport,
+                                    signLanguageSupport = signLanguageSupport,
+                                    suitableForVisuallyImpaired = suitableForVisuallyImpaired,
+                                    suitableForPhysicallyDisabled = suitableForPhysicallyDisabled,
+                                    suitableForHearingImpaired = suitableForHearingImpaired,
+                                    visionMenu = visionMenu,
+                                    visionStaff = visionStaff,
+                                    generalAccessible = generalAccessible,
+                                    notes = notes.ifBlank { null }
+                                )
+                            )
+                            saveUserFeedbacks(context, userFeedbacks)
+                            showBottomSheet = false
+                        },
+                        modifier = Modifier.padding(top = 12.dp).fillMaxWidth()
+                    ) {
+                        Text("Kaydet")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -412,4 +631,23 @@ fun isLocationEnabled(context: Context): Boolean {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
     return locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
             locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+}
+
+fun getUserFeedbackSummary(feedback: UserAccessibilityFeedback): String {
+    val features = mutableListOf<String>()
+    if (feedback.wheelchairEntrance) features.add("✔️ Giriş Uygun")
+    if (feedback.wheelchairParking) features.add("✔️ Otopark Uygun")
+    if (feedback.wheelchairRestroom) features.add("✔️ Tuvalet Uygun")
+    if (feedback.wheelchairSeating) features.add("✔️ Oturma Alanı Uygun")
+    if (feedback.rampAvailable) features.add("✔️ Rampa Var")
+    if (feedback.elevatorAvailable) features.add("✔️ Asansör Var")
+    if (feedback.brailleSupport) features.add("✔️ Braille Desteği")
+    if (feedback.signLanguageSupport) features.add("✔️ İşaret Dili Desteği")
+    if (feedback.suitableForVisuallyImpaired) features.add("✔️ Görme Engelliler İçin Uygun")
+    if (feedback.suitableForPhysicallyDisabled) features.add("✔️ Fiziksel Engelliler İçin Uygun")
+    if (feedback.suitableForHearingImpaired) features.add("✔️ İşitme Engelliler İçin Uygun")
+    if (feedback.visionMenu) features.add("✔️ Görme Engelli Menüsü")
+    if (feedback.visionStaff) features.add("✔️ Görme Engelliye Yardımcı Personel")
+    if (feedback.generalAccessible) features.add("✔️ Genel Olarak Uygun")
+    return if (features.isEmpty()) "Belirtilmiş erişilebilirlik özelliği yok." else features.joinToString("\n")
 }
