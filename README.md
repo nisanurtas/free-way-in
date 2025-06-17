@@ -6,7 +6,7 @@ FreeWayIn, erişilebilirliği ön planda tutan bireylerin kamusal alanlar hakkı
 
 ## 🏆 Ödül ve Etkinlik
 
-🎉 Bu proje, **Samsung Innovation Campus Hackathon**'u kapsamında geliştirilmiş ve **birincilik ödülünü kazanmıştır.**
+🎉 Bu proje, **Samsung Innovation Campus Hackathon**'u kapsamında geliştirilmiş ve **birincilik kazanmıştır.**
 
 ---
 
